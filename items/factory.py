@@ -1,6 +1,7 @@
 from typing import Tuple
 
 import pygame as pg
+from pygame import Rect, Surface
 
 from items import Dynamic, Static, extract_frames
 from util import Grid, ItemType
@@ -94,7 +95,7 @@ class Provider:
         window_width = self.__cell_width * self.__grid_width
         window_height = self.__cell_height * self.__grid_height
 
-        self.__screen = pg.display.set_mode((window_width, window_height))
+        self.__game_area = Surface((window_width, window_height))
 
         self.__static_sprites = pg.sprite.Group()
         self.__interactive_sprites = pg.sprite.Group()
@@ -190,8 +191,8 @@ class Provider:
         return self.__grid_height
 
     @property
-    def screen(self) -> pg.Surface:
-        return self.__screen
+    def game_area(self) -> pg.Surface:
+        return self.__game_area
 
     @property
     def grid(self) -> Grid:

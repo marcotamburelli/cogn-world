@@ -1,6 +1,7 @@
 from typing import Dict, List, Tuple
 
 import pygame as pg
+from pygame import Rect
 
 from items import Dynamic
 from items.actions import get_keyboard_action, get_random_action
@@ -11,30 +12,41 @@ from view import CharacterView
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
+TEXT_PAD = 3
 
 
 class Game:
-    def __init__(self, config: str) -> None:
+    def __init__(
+        self,
+        screen_size: Tuple[int, int],
+        char_view_size: Tuple[int, int],
+        config: str
+    ) -> None:
         pg.init()
+        self.__screen = pg.display.set_mode(
+            (screen_size[0] + char_view_size[0], screen_size[1])
+        )
 
-        self.__provider = Provider('config.yaml')
+        self.__provider = Provider(config)
 
-        self. __screen = self.__provider.screen
-        self.__score_font = pg.font.Font(None, 36)
+        self.__screen_rect = Rect(0, 0, screen_size[0], screen_size[1])
+        self.__game_area = self.__provider.game_area
 
         self.__clock = pg.time.Clock()
+
+        self.__screen_size = screen_size
 
         self.__main_char = self.__provider.main_character
         self.__main_char.collision_rules = MAIN_CHAR_COLLISION
 
-        self.__char_view = CharacterView(100, 200)
+        self.__char_view = CharacterView(char_view_size[0], char_view_size[1])
 
         for monster in self.__get_monsters():
             monster.collision_rules = MONSTER_COLLISION
 
         self.__grid = self.__provider.grid
 
-        self.__area = self.__screen.get_rect()
+        self.__game_rect = self.__game_area.get_rect()
 
         self.__consumed: Dict[str, Tuple[int, Item]] = {}
 
@@ -60,18 +72,15 @@ class Game:
 
             self.__update_sprites()
 
+            # Drawing part:
+            self.__game_area.fill(BLACK)
             self.__screen.fill(BLACK)
 
             self.__draw_score()
 
             self.__draw_sprites()
 
-            view = self.__char_view.get_view(
-                target_surface=self.__screen,
-                character=self.__main_char
-            )
-            view.set_alpha(150)
-            self.__screen.blit(view, (self.__area.width - 100, 0))
+            self.__draw_screen()
 
             pg.display.flip()
 
@@ -80,17 +89,59 @@ class Game:
 
         pg.quit()
 
+    def __draw_screen(self):
+        self.__screen_rect.clamp_ip(self.__main_char.rect)
+        self.__screen_rect.clamp_ip(self.__game_rect)
+
+        visible_surface = self.__game_area.subsurface(self.__screen_rect)
+
+        view = self.__char_view.get_view(
+            target_surface=self.__game_area,
+            character=self.__main_char
+        )
+        view.set_alpha(200)
+
+        self.__screen.blit(
+            source=view,
+            dest=(
+                self.__screen_size[0],
+                self.__screen_size[1] - view.get_rect().height
+            )
+        )
+        self.__screen.blit(source=visible_surface, dest=(0, 0))
+
+        pg.draw.line(
+            surface=self.__screen,
+            color=WHITE,
+            start_pos=(self.__screen_size[0], 0),
+            end_pos=(self.__screen_size[0], self.__screen_size[1]),
+            width=2
+        )
+
     def __draw_sprites(self):
-        self.__provider.interactive_sprites.draw(self.__screen)
-        self.__provider.main_sprites.draw(self.__screen)
-        self.__provider.dynamic_sprites.draw(self.__screen)
-        self.__provider.static_sprites.draw(self.__screen)
+        self.__provider.interactive_sprites.draw(self.__game_area)
+        self.__provider.main_sprites.draw(self.__game_area)
+        self.__provider.dynamic_sprites.draw(self.__game_area)
+        self.__provider.static_sprites.draw(self.__game_area)
 
     def __draw_score(self):
-        score_text = f"Score: {self.__main_char.item_status['score']}"
-        text_surface = self.__score_font.render(score_text, True, WHITE)
-        text_surface.set_alpha(100)
-        self.__screen.blit(text_surface, (3, 3))
+        font = pg.font.Font(None, 36)
+
+        text_surface = font.render('Score', True, WHITE)
+        self.__screen.blit(
+            source=text_surface,
+            dest=(self.__screen_size[0] + TEXT_PAD, TEXT_PAD)
+        )
+
+        r = text_surface.get_rect()
+
+        font = pg.font.Font(None, 36)
+        score = self.__main_char.item_status['score']
+        text_surface = font.render(f'{score}', True, WHITE)
+        self.__screen.blit(
+            source=text_surface,
+            dest=(self.__screen_size[0] + TEXT_PAD, TEXT_PAD + r.height)
+        )
 
     def __update_sprites(self):
         self.__provider.interactive_sprites.update()
@@ -125,7 +176,7 @@ class Game:
             a = get_random_action(linear_speed=75)
 
             monster.start_action(a, current_timestamp=current_timestamp)
-            monster.act(dt=dt, area=self.__area, grid=self.__grid)
+            monster.act(dt=dt, area=self.__game_rect, grid=self.__grid)
 
     def __get_monsters(self):
         dynamic_sprites: List[Dynamic] = self.__provider \
@@ -141,7 +192,11 @@ class Game:
             a,
             current_timestamp=current_timestamp
         )
-        self.__main_char.act(dt=dt, area=self.__area, grid=self.__grid)
+        self.__main_char.act(dt=dt, area=self.__game_rect, grid=self.__grid)
 
 
-Game('config.yaml').run()
+Game(
+    screen_size=(640, 480),
+    char_view_size=(150, 250),
+    config='config.yaml'
+).run()
